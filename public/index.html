@@ -62,12 +62,13 @@ socket.on('updatePlayers', players => {
 
 let isDead = false;
 let gameLoopRunning = false;
-let gameLoopFrame = null;
 let gameLoopId = null;
-startGameLoop();   // <-- ini memicu loop pertama kali
 let lastFrameTime = performance.now();
 let fps = 0;
 let fpsDisplayTimer = 0;
+
+// Inisialisasi game loop saat pertama kali
+startGameLoop();
 
 /*********************************************************************
  *  GAME LOGIC (single file – local demo)
@@ -105,6 +106,7 @@ const cloudImg = (()=>{
 const clouds=[{x:100,y:50,s:1},{x:300,y:80,s:1.2},{x:600,y:40,s:.8}];
 
 function resetGame() {
+  // Reset player position dan physics
   player.x = 50;
   player.y = 300;
   player.vx = 0;
@@ -122,15 +124,15 @@ function resetGame() {
 
   document.getElementById('menu').style.display = 'none';
   document.getElementById('retryBtn')?.remove();
-  if (!gameLoopRunning) startGameLoop();
   
-  // pastikan joystick & kecepatan benar-benar kosong
-dragging = false;
-dir = null;
-knob.style.transform = 'translate(-50%, -50%)';
-player.vx = 0;
-player.vy = 0;
-player.onGround = false;
+  // Reset joystick dan kontrol
+  dragging = false;
+  knob.style.transform = 'translate(-50%, -50%)';
+  
+  // Pastikan game loop berjalan dengan benar
+  if (!gameLoopRunning) {
+    startGameLoop();
+  }
 }
 
 /* ---------- START ---------- */
@@ -146,13 +148,13 @@ function startGame(){
 function startGameLoop() {
   if (!gameLoopRunning) {
     gameLoopRunning = true;
-    gameLoopFrame = requestAnimationFrame(gameLoop);
+    gameLoopId = requestAnimationFrame(gameLoop);
     console.log("[DEBUG] Game loop started");
   }
 }
 
- function stopGameLoop() {
-  if (gameLoopId !== null) {
+function stopGameLoop() {
+  if (gameLoopRunning && gameLoopId !== null) {
     cancelAnimationFrame(gameLoopId);
     gameLoopId = null;
     gameLoopRunning = false;
@@ -213,11 +215,13 @@ ctx.fillStyle = finishPoint.color;
 ctx.fillRect(finishPoint.x - cameraX, finishPoint.y, finishPoint.w, finishPoint.h);
 
   // physics (selalu jalan, lalu kirim ke server)
-if (!dragging) player.vx = 0;
-player.vy += 0.6;
-player.x += player.vx;
-player.y += player.vy;
-player.onGround = false;
+  if (!dragging) {
+    player.vx = 0;
+  }
+  player.vy += 0.6;
+  player.x += player.vx;
+  player.y += player.vy;
+  player.onGround = false;
 
 
   // batas kiri dan kanan
@@ -284,11 +288,7 @@ gameLoopId = requestAnimationFrame(gameLoop);
 }
 
 function showGameOver() {
-stopGameLoop();
-if (gameLoopRunning) {
-    cancelAnimationFrame(gameLoopFrame);
-    gameLoopRunning = false;   console.log("[DEBUG] Game loop stopped (Game Over)");
-  } 
+  stopGameLoop();
   const menu = document.getElementById('menu');
   menu.style.display = 'flex';
   menu.innerHTML = `
@@ -298,12 +298,9 @@ if (gameLoopRunning) {
   document.getElementById('retryBtn').onclick = resetGame;
 }
 
-function showLevelComplete() {  isDead = true;
- stopGameLoop();
-  if (gameLoopRunning) {
-    cancelAnimationFrame(gameLoopFrame);
-    gameLoopRunning = false;  console.log("[DEBUG] Game loop stopped (Level Complete)");
-  }  
+function showLevelComplete() {
+  isDead = true;
+  stopGameLoop();
   const menu = document.getElementById('menu');
   menu.style.display = 'flex';
   menu.innerHTML = `
@@ -331,12 +328,32 @@ function move(e){
   const len=Math.min(Math.abs(dx),35);
   const dir=dx>0?1:-1;
   knob.style.transform=`translate(calc(-50% + ${dir*len}px), -50%)`;
-  player.vx = dir * 3;
+  player.vx = dir * 3; // Kecepatan tetap 3
 }
 document.getElementById('jumpBtn').addEventListener('touchstart',()=>{
   if(player.onGround) {
-    player.vy = -12;
+    player.vy = -12; // Tinggi lompatan tetap -12
     console.log("[DEBUG] Jump triggered");
+  }
+});
+
+// Keyboard support untuk testing di desktop
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowLeft' || e.key === 'a') {
+    player.vx = -3;
+  } else if (e.key === 'ArrowRight' || e.key === 'd') {
+    player.vx = 3;
+  } else if (e.key === ' ' || e.key === 'ArrowUp' || e.key === 'w') {
+    if(player.onGround) {
+      player.vy = -12;
+      console.log("[DEBUG] Jump triggered (keyboard)");
+    }
+  }
+});
+
+document.addEventListener('keyup', (e) => {
+  if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'ArrowRight' || e.key === 'd') {
+    player.vx = 0;
   }
 });
 </script>
