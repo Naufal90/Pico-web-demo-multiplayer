@@ -62,9 +62,7 @@ socket.on('updatePlayers', players => {
 
 let isDead = false;
 let gameLoopRunning = false;
-let gameLoopFrame = null;
 let gameLoopId = null;
-startGameLoop();   // <-- ini memicu loop pertama kali
 let lastFrameTime = performance.now();
 let fps = 0;
 let fpsDisplayTimer = 0;
@@ -105,6 +103,10 @@ const cloudImg = (()=>{
 const clouds=[{x:100,y:50,s:1},{x:300,y:80,s:1.2},{x:600,y:40,s:.8}];
 
 function resetGame() {
+  // Hentikan game loop terlebih dahulu
+  stopGameLoop();
+  
+  // Reset player state
   player.x = 50;
   player.y = 300;
   player.vx = 0;
@@ -122,15 +124,17 @@ function resetGame() {
 
   document.getElementById('menu').style.display = 'none';
   document.getElementById('retryBtn')?.remove();
-  if (!gameLoopRunning) startGameLoop();
   
   // pastikan joystick & kecepatan benar-benar kosong
-dragging = false;
-dir = null;
-knob.style.transform = 'translate(-50%, -50%)';
-player.vx = 0;
-player.vy = 0;
-player.onGround = false;
+  dragging = false;
+  dir = null;
+  knob.style.transform = 'translate(-50%, -50%)';
+  player.vx = 0;
+  player.vy = 0;
+  player.onGround = false;
+  
+  // Mulai game loop baru
+  startGameLoop();
 }
 
 /* ---------- START ---------- */
@@ -140,18 +144,19 @@ function startGame(){
   socket.emit('newPlayer', name);
   document.getElementById('menu').style.display='none';
   document.getElementById('mobileUI').style.display='flex';
+  isDead = false; // Reset status mati
   resetGame();
 }
 
 function startGameLoop() {
   if (!gameLoopRunning) {
     gameLoopRunning = true;
-    gameLoopFrame = requestAnimationFrame(gameLoop);
+    gameLoopId = requestAnimationFrame(gameLoop);
     console.log("[DEBUG] Game loop started");
   }
 }
 
- function stopGameLoop() {
+function stopGameLoop() {
   if (gameLoopId !== null) {
     cancelAnimationFrame(gameLoopId);
     gameLoopId = null;
@@ -165,15 +170,20 @@ const levelWidth = 1000; // Lebar total level/map
 let cameraX = 0;
 
 function gameLoop(){
+  // Pastikan game loop tidak berjalan jika sudah dihentikan
+  if (!gameLoopRunning) {
+    return;
+  }
+  
   const now = performance.now();
-const delta = now - lastFrameTime;
-lastFrameTime = now;
+  const delta = now - lastFrameTime;
+  lastFrameTime = now;
 
-fpsDisplayTimer += delta;
-if (fpsDisplayTimer >= 250) { // update tiap 0.25 detik
-  fps = Math.round(1000 / delta);
-  fpsDisplayTimer = 0;
-}
+  fpsDisplayTimer += delta;
+  if (fpsDisplayTimer >= 250) { // update tiap 0.25 detik
+    fps = Math.round(1000 / delta);
+    fpsDisplayTimer = 0;
+  }
 
   /* Update camera */
 if (USE_SERVER) {
@@ -240,6 +250,7 @@ player.onGround = false;
 if (player.y > H + 100 && !isDead) {
   isDead = true;
   showGameOver();
+  return; // Hentikan eksekusi game loop
 }
 
 // deteksi menyentuh finish
@@ -247,9 +258,11 @@ if (
   player.x + player.w > finishPoint.x &&
   player.x < finishPoint.x + finishPoint.w &&
   player.y + player.h > finishPoint.y &&
-  player.y < finishPoint.y + finishPoint.h
+  player.y < finishPoint.y + finishPoint.h &&
+  !isDead
 ) {
   showLevelComplete();
+  return; // Hentikan eksekusi game loop
 }
 
   // draw player
@@ -277,18 +290,17 @@ if (USE_SERVER && playerId && !isDead) {
   
   //== FPS Display ==
   ctx.fillStyle = '#000';
-ctx.font = '16px Arial';
-ctx.fillText(`FPS: ${fps}`, 10, 20);
+  ctx.font = '16px Arial';
+  ctx.fillText(`FPS: ${fps}`, 10, 20);
 
-gameLoopId = requestAnimationFrame(gameLoop);
+  // Hanya lanjutkan game loop jika masih running dan tidak mati
+  if (gameLoopRunning && !isDead) {
+    gameLoopId = requestAnimationFrame(gameLoop);
+  }
 }
 
 function showGameOver() {
-stopGameLoop();
-if (gameLoopRunning) {
-    cancelAnimationFrame(gameLoopFrame);
-    gameLoopRunning = false;   console.log("[DEBUG] Game loop stopped (Game Over)");
-  } 
+  stopGameLoop();
   const menu = document.getElementById('menu');
   menu.style.display = 'flex';
   menu.innerHTML = `
@@ -298,12 +310,9 @@ if (gameLoopRunning) {
   document.getElementById('retryBtn').onclick = resetGame;
 }
 
-function showLevelComplete() {  isDead = true;
- stopGameLoop();
-  if (gameLoopRunning) {
-    cancelAnimationFrame(gameLoopFrame);
-    gameLoopRunning = false;  console.log("[DEBUG] Game loop stopped (Level Complete)");
-  }  
+function showLevelComplete() {
+  isDead = true;
+  stopGameLoop();
   const menu = document.getElementById('menu');
   menu.style.display = 'flex';
   menu.innerHTML = `
@@ -319,6 +328,7 @@ function showLevelComplete() {  isDead = true;
 const knob = document.getElementById('knob');
 const joy  = document.getElementById('joystick');
 let dragging=false;
+let dir = null;
 
 joy.addEventListener('touchstart', e=>{dragging=true;move(e)});
 joy.addEventListener('touchmove', move);
