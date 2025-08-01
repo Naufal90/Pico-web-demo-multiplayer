@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no"/>
+<script src="/socket.io/socket.io.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+<script>eruda.init();</script>
+<title>Pico Park Demo Satu File</title>
+<style>
+/* ---------- GLOBAL ---------- */
+html,body{margin:0;height:100%;font-family:Arial,Helvetica,sans-serif;overflow:hidden}
+body{background:linear-gradient(to bottom,#87CEEB 0%,#98D8E8 100%);display:flex;flex-direction:column;align-items:center;justify-content:center}
+
+/* ---------- CANVAS ---------- */
+#game{background:#87CEEB;border-radius:12px}
+
+/* ---------- MOBILE UI ---------- */
+#mobileUI{position:fixed;bottom:20px;left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:0 30px}
+#joystick{position:relative;width:110px;height:110px;background:rgba(255,255,255,.25);border:3px solid rgba(255,255,255,.6);border-radius:50%}
+#knob{position:absolute;top:50%;left:50%;width:40px;height:40px;background:#fff;border-radius:50%;transform:translate(-50%,-50%);transition:.1s}
+#jumpBtn{width:80px;height:80px;background:rgba(255,255,255,.25);border:3px solid rgba(255,255,255,.6);border-radius:50%;font-size:28px;color:#fff;display:flex;align-items:center;justify-content:center}
+#jumpBtn::after{content:'↑'}
+
+/* ---------- MENU ---------- */
+#menu{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.65);padding:30px 40px;border-radius:15px;color:#fff;text-align:center}
+#menu input,#menu button{margin:8px 0;padding:10px 14px;font-size:18px;border-radius:8px;border:none}
+#menu button{background:#0f9d58;color:#fff;cursor:pointer}
+</style>
+</head>
+<body>
+
+<!-- MENU -->
+<section id="menu">
+  <h1>Pico Park Demo</h1>
+  <input id="username" placeholder="Nama kamu" value="Player"/>
+  <button onclick="startGame()">Mulai</button>
+</section>
+
+<!-- GAME CANVAS -->
+<canvas id="game" width="800" height="400"></canvas>
+
+<!-- MOBILE UI -->
+<div id="mobileUI">
+  <div id="joystick"><div id="knob"></div></div>
+  <button id="jumpBtn"></button>
+</div>
+
+<script>
+  const socket = io(); // koneksi ke server
+  const USE_SERVER = true; // <-- tambahkan di atas dekat socket.on(...)
+let playerId = null;
+let allPlayers = {};
+console.log("[DEBUG] Socket initialized");
+
+socket.on('updatePlayers', players => {
+  allPlayers = players;
+  if (!playerId) {
+    playerId = socket.id;
+  }
+});
+
+let isDead = false;
+let gameLoopRunning = false;
+let gameLoopFrame = null;
+let gameLoopId = null;
+startGameLoop();   // <-- ini memicu loop pertama kali
+let lastFrameTime = performance.now();
+let fps = 0;
+let fpsDisplayTimer = 0;
+
+/*********************************************************************
+ *  GAME LOGIC (single file – local demo)
+ *********************************************************************/
+const canvas = document.getElementById('game');
+const ctx     = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+
+const player = {x:50,y:300,w:30,h:30,color:'#FF6B6B',vx:0,vy:0,onGround:false};
+
+/* ---------- LEVEL ---------- */
+const platforms = [
+  {x:0,y:380,w:800,h:20},
+  {x:200,y:300,w:100,h:20},
+  {x:400,y:220,w:100,h:20},
+  {x:600,y:160,w:100,h:20}
+];
+
+const startPoint = { x: 50, y: 350, w: 30, h: 30, color: '#4CAF50' };  // Hijau
+const finishPoint = { x: 600, y: 130, w: 30, h: 30, color: '#FFC107' }; // Kuning
+
+/* ---------- BACKGROUND CLOUD ---------- */
+const cloudImg = (()=>{
+  const c=document.createElement('canvas');
+  c.width=120;c.height=60;
+  const x=c.getContext('2d');
+  x.fillStyle='#fff';
+  x.beginPath();
+  x.arc(30,30,30,0,Math.PI*2);
+  x.arc(70,25,35,0,Math.PI*2);
+  x.arc(100,30,25,0,Math.PI*2);
+  x.fill();
+  return c;
+})();
+const clouds=[{x:100,y:50,s:1},{x:300,y:80,s:1.2},{x:600,y:40,s:.8}];
+
+function resetGame() {
+  player.x = 50;
+  player.y = 300;
+  player.vx = 0;
+  player.vy = 0;
+  player.onGround = false;
+  isDead = false;
+
+  // set playerId dari socket.id yang aktif
+  playerId = socket.id;
+
+  // baru kirim reset
+  if (USE_SERVER) {
+    socket.emit('resetPlayer');
+  }
+
+  document.getElementById('menu').style.display = 'none';
+  document.getElementById('retryBtn')?.remove();
+  if (!gameLoopRunning) startGameLoop();
+  
+  // pastikan joystick & kecepatan benar-benar kosong
+dragging = false;
+dir = null;
+knob.style.transform = 'translate(-50%, -50%)';
+player.vx = 0;
+player.vy = 0;
+player.onGround = false;
+}
+
+/* ---------- START ---------- */
+function startGame(){
+  const name = document.getElementById('username').value;
+  console.log("[DEBUG] Sending newPlayer with name:", name);
+  socket.emit('newPlayer', name);
+  document.getElementById('menu').style.display='none';
+  document.getElementById('mobileUI').style.display='flex';
+  resetGame();
+}
+
+function startGameLoop() {
+  if (!gameLoopRunning) {
+    gameLoopRunning = true;
+    gameLoopFrame = requestAnimationFrame(gameLoop);
+    console.log("[DEBUG] Game loop started");
+  }
+}
+
+ function stopGameLoop() {
+  if (gameLoopId !== null) {
+    cancelAnimationFrame(gameLoopId);
+    gameLoopId = null;
+    gameLoopRunning = false;
+    console.log("[DEBUG] Game loop stopped");
+  }
+}
+
+/* ---------- RENDER ---------- */
+const levelWidth = 1000; // Lebar total level/map
+let cameraX = 0;
+
+function gameLoop(){
+  const now = performance.now();
+const delta = now - lastFrameTime;
+lastFrameTime = now;
+
+fpsDisplayTimer += delta;
+if (fpsDisplayTimer >= 250) { // update tiap 0.25 detik
+  fps = Math.round(1000 / delta);
+  fpsDisplayTimer = 0;
+}
+
+  /* Update camera */
+if (USE_SERVER) {
+  const me = allPlayers[playerId];
+  if (me) {
+    player.x = me.x;
+    player.y = me.y;
+    player.color = me.color;
+  }
+}
+
+cameraX = Math.max(0, Math.min(player.x - W / 2 + player.w / 2, levelWidth - W));
+
+  // sky
+  ctx.fillStyle='#87CEEB';
+  ctx.fillRect(0,0,W,H);
+
+  // clouds (pakai posisi tetap, tidak ikut kamera)
+  clouds.forEach(c=>{
+    c.x -= 0.3*c.s;
+    if(c.x<-120) c.x = W+20;
+    ctx.drawImage(cloudImg,c.x,c.y,120*c.s,60*c.s);
+  });
+
+  // platforms
+  ctx.fillStyle='#5D4037';
+  platforms.forEach(p=>{
+    ctx.fillRect(p.x - cameraX, p.y, p.w, p.h);
+  });
+  
+  // draw start
+ctx.fillStyle = startPoint.color;
+ctx.fillRect(startPoint.x - cameraX, startPoint.y, startPoint.w, startPoint.h);
+
+// draw finish
+ctx.fillStyle = finishPoint.color;
+ctx.fillRect(finishPoint.x - cameraX, finishPoint.y, finishPoint.w, finishPoint.h);
+
+  // physics (selalu jalan, lalu kirim ke server)
+if (!dragging) player.vx = 0;
+player.vy += 0.6;
+player.x += player.vx;
+player.y += player.vy;
+player.onGround = false;
+
+
+  // batas kiri dan kanan
+  if (player.x < 0) player.x = 0;
+  if (player.x + player.w > levelWidth) player.x = levelWidth - player.w;
+
+  // deteksi platform
+  platforms.forEach(p=>{
+    if(player.x+player.w>p.x && player.x<p.x+p.w &&
+       player.y+player.h>p.y && player.y<p.y+p.h){
+      if(player.vy>0){
+        player.y = p.y-player.h;
+        player.vy = 0;
+        player.onGround=true;
+      }
+    }
+  });
+  
+  // jatuh ke void
+if (player.y > H + 100 && !isDead) {
+  isDead = true;
+  showGameOver();
+}
+
+// deteksi menyentuh finish
+if (
+  player.x + player.w > finishPoint.x &&
+  player.x < finishPoint.x + finishPoint.w &&
+  player.y + player.h > finishPoint.y &&
+  player.y < finishPoint.y + finishPoint.h
+) {
+  showLevelComplete();
+}
+
+  // draw player
+  Object.values(allPlayers).forEach(p => {
+  ctx.fillStyle = p.color;
+  ctx.fillRect(p.x - cameraX, p.y, player.w, player.h);
+
+  // mata
+  ctx.fillStyle='#fff';
+  ctx.fillRect(p.x+6 - cameraX, p.y+6, 8, 8);
+  ctx.fillRect(p.x+16 - cameraX, p.y+6, 8, 8);
+  ctx.fillStyle='#000';
+  ctx.fillRect(p.x+8 - cameraX, p.y+8, 4, 4);
+  ctx.fillRect(p.x+18 - cameraX, p.y+8, 4, 4);
+
+  // nama
+  ctx.fillStyle = '#000';
+  ctx.font = '14px Arial';
+  ctx.fillText(p.name, p.x - cameraX, p.y - 8);
+});
+
+if (USE_SERVER && playerId && !isDead) {
+  socket.emit('move', { x: player.x, y: player.y });
+}
+  
+  //== FPS Display ==
+  ctx.fillStyle = '#000';
+ctx.font = '16px Arial';
+ctx.fillText(`FPS: ${fps}`, 10, 20);
+
+gameLoopId = requestAnimationFrame(gameLoop);
+}
+
+function showGameOver() {
+stopGameLoop();
+if (gameLoopRunning) {
+    cancelAnimationFrame(gameLoopFrame);
+    gameLoopRunning = false;   console.log("[DEBUG] Game loop stopped (Game Over)");
+  } 
+  const menu = document.getElementById('menu');
+  menu.style.display = 'flex';
+  menu.innerHTML = `
+    <h1>Kamu Mati!</h1>
+    <button id="retryBtn">Coba Lagi</button>
+  `;
+  document.getElementById('retryBtn').onclick = resetGame;
+}
+
+function showLevelComplete() {  isDead = true;
+ stopGameLoop();
+  if (gameLoopRunning) {
+    cancelAnimationFrame(gameLoopFrame);
+    gameLoopRunning = false;  console.log("[DEBUG] Game loop stopped (Level Complete)");
+  }  
+  const menu = document.getElementById('menu');
+  menu.style.display = 'flex';
+  menu.innerHTML = `
+    <h1>Level Selesai!</h1>
+    <button id="retryBtn">Main Lagi</button>
+  `;
+  document.getElementById('retryBtn').onclick = resetGame;
+}
+
+/*********************************************************************
+ *  MOBILE CONTROL
+ *********************************************************************/
+const knob = document.getElementById('knob');
+const joy  = document.getElementById('joystick');
+let dragging=false;
+
+joy.addEventListener('touchstart', e=>{dragging=true;move(e)});
+joy.addEventListener('touchmove', move);
+joy.addEventListener('touchend', ()=>{dragging=false;knob.style.transform='translate(-50%,-50%)';player.vx=0});
+
+function move(e){
+  if(!dragging)return;
+  const rect=joy.getBoundingClientRect();
+  const dx=e.touches[0].clientX-rect.left-55;
+  const len=Math.min(Math.abs(dx),35);
+  const dir=dx>0?1:-1;
+  knob.style.transform=`translate(calc(-50% + ${dir*len}px), -50%)`;
+  player.vx = dir * 3;
+}
+document.getElementById('jumpBtn').addEventListener('touchstart',()=>{
+  if(player.onGround) {
+    player.vy = -12;
+    console.log("[DEBUG] Jump triggered");
+  }
+});
+</script>
+</body>
+</html>
