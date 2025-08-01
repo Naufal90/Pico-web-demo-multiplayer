@@ -106,6 +106,8 @@ const cloudImg = (()=>{
 const clouds=[{x:100,y:50,s:1},{x:300,y:80,s:1.2},{x:600,y:40,s:.8}];
 
 function resetGame() {
+  console.log("[DEBUG] Resetting game...");
+  
   // Reset player position dan physics
   player.x = 50;
   player.y = 300;
@@ -131,7 +133,15 @@ function resetGame() {
   
   // Pastikan game loop berjalan dengan benar
   if (!gameLoopRunning) {
+    console.log("[DEBUG] Starting new game loop");
     startGameLoop();
+  } else {
+    console.log("[DEBUG] Game loop already running, refreshing frame");
+    // Jika game loop sudah berjalan, pastikan tidak ada frame yang pending
+    if (gameLoopId !== null) {
+      cancelAnimationFrame(gameLoopId);
+    }
+    gameLoopId = requestAnimationFrame(gameLoop);
   }
 }
 
@@ -148,14 +158,20 @@ function startGame(){
 function startGameLoop() {
   if (!gameLoopRunning) {
     gameLoopRunning = true;
+    // Pastikan tidak ada frame yang pending sebelum memulai yang baru
+    if (gameLoopId !== null) {
+      cancelAnimationFrame(gameLoopId);
+    }
     gameLoopId = requestAnimationFrame(gameLoop);
     console.log("[DEBUG] Game loop started");
   }
 }
 
 function stopGameLoop() {
-  if (gameLoopRunning && gameLoopId !== null) {
-    cancelAnimationFrame(gameLoopId);
+  if (gameLoopRunning) {
+    if (gameLoopId !== null) {
+      cancelAnimationFrame(gameLoopId);
+    }
     gameLoopId = null;
     gameLoopRunning = false;
     console.log("[DEBUG] Game loop stopped");
@@ -281,13 +297,17 @@ if (USE_SERVER && playerId && !isDead) {
   
   //== FPS Display ==
   ctx.fillStyle = '#000';
-ctx.font = '16px Arial';
-ctx.fillText(`FPS: ${fps}`, 10, 20);
+  ctx.font = '16px Arial';
+  ctx.fillText(`FPS: ${fps}`, 10, 20);
 
-gameLoopId = requestAnimationFrame(gameLoop);
+  // Lanjutkan game loop hanya jika masih running
+  if (gameLoopRunning) {
+    gameLoopId = requestAnimationFrame(gameLoop);
+  }
 }
 
 function showGameOver() {
+  console.log("[DEBUG] Game Over - stopping game loop");
   stopGameLoop();
   const menu = document.getElementById('menu');
   menu.style.display = 'flex';
@@ -300,6 +320,7 @@ function showGameOver() {
 
 function showLevelComplete() {
   isDead = true;
+  console.log("[DEBUG] Level Complete - stopping game loop");
   stopGameLoop();
   const menu = document.getElementById('menu');
   menu.style.display = 'flex';
