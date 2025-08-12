@@ -62,12 +62,12 @@ socket.on('updatePlayers', players => {
 
 let isDead = false;
 let gameLoopRunning = false;
-let gameLoopFrame = null;
 let gameLoopId = null;
-startGameLoop();   // <-- ini memicu loop pertama kali
 let lastFrameTime = performance.now();
 let fps = 0;
 let fpsDisplayTimer = 0;
+
+startGameLoop();
 
 /*********************************************************************
  *  GAME LOGIC (single file – local demo)
@@ -122,15 +122,13 @@ function resetGame() {
 
   document.getElementById('menu').style.display = 'none';
   document.getElementById('retryBtn')?.remove();
-  if (!gameLoopRunning) startGameLoop();
   
   // pastikan joystick & kecepatan benar-benar kosong
 dragging = false;
-dir = null;
 knob.style.transform = 'translate(-50%, -50%)';
-player.vx = 0;
-player.vy = 0;
-player.onGround = false;
+if (!gameLoopRunning) {
+   startGameLoop();
+  }
 }
 
 /* ---------- START ---------- */
@@ -146,13 +144,13 @@ function startGame(){
 function startGameLoop() {
   if (!gameLoopRunning) {
     gameLoopRunning = true;
-    gameLoopFrame = requestAnimationFrame(gameLoop);
+    gameLoopId = requestAnimationFrame(gameLoop);
     console.log("[DEBUG] Game loop started");
   }
 }
 
  function stopGameLoop() {
-  if (gameLoopId !== null) {
+  if (gameLoopRunning && gameLoopId !== null) {
     cancelAnimationFrame(gameLoopId);
     gameLoopId = null;
     gameLoopRunning = false;
@@ -213,7 +211,9 @@ ctx.fillStyle = finishPoint.color;
 ctx.fillRect(finishPoint.x - cameraX, finishPoint.y, finishPoint.w, finishPoint.h);
 
   // physics (selalu jalan, lalu kirim ke server)
-if (!dragging) player.vx = 0;
+if (!dragging) {
+  player.vx = 0;
+}
 player.vy += 0.6;
 player.x += player.vx;
 player.y += player.vy;
@@ -284,11 +284,8 @@ gameLoopId = requestAnimationFrame(gameLoop);
 }
 
 function showGameOver() {
-stopGameLoop();
-if (gameLoopRunning) {
-    cancelAnimationFrame(gameLoopFrame);
-    gameLoopRunning = false;   console.log("[DEBUG] Game loop stopped (Game Over)");
-  } 
+  stopGameLoop();
+    console.log("[DEBUG] Game loop stopped (Game Over)");
   const menu = document.getElementById('menu');
   menu.style.display = 'flex';
   menu.innerHTML = `
@@ -298,12 +295,10 @@ if (gameLoopRunning) {
   document.getElementById('retryBtn').onclick = resetGame;
 }
 
-function showLevelComplete() {  isDead = true;
- stopGameLoop();
-  if (gameLoopRunning) {
-    cancelAnimationFrame(gameLoopFrame);
-    gameLoopRunning = false;  console.log("[DEBUG] Game loop stopped (Level Complete)");
-  }  
+function showLevelComplete() {  
+  isDead = true;
+  stopGameLoop();
+    console.log("[DEBUG] Game loop stopped (Level Complete)");
   const menu = document.getElementById('menu');
   menu.style.display = 'flex';
   menu.innerHTML = `
