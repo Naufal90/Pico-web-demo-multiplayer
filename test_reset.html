@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Reset Functionality</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f0f0f0;
+        }
+        .test-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-result {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #0056b3; }
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 Test Reset Functionality</h1>
+    
+    <div class="test-container">
+        <h2>Test 1: Reset Player Position</h2>
+        <button onclick="testResetPosition()">Test Reset Position</button>
+        <div id="position-result"></div>
+    </div>
+
+    <div class="test-container">
+        <h2>Test 2: Reset Player Velocity</h2>
+        <button onclick="testResetVelocity()">Test Reset Velocity</button>
+        <div id="velocity-result"></div>
+    </div>
+
+    <div class="test-container">
+        <h2>Test 3: Multiple Reset Calls</h2>
+        <button onclick="testMultipleResets()">Test Multiple Resets</button>
+        <div id="multiple-result"></div>
+    </div>
+
+    <div class="test-container">
+        <h2>Test 4: String Values Check</h2>
+        <button onclick="testStringValues()">Test String Values</button>
+        <div id="string-result"></div>
+    </div>
+
+    <div class="test-container">
+        <h2>Debug Log</h2>
+        <div id="debug-log" class="log"></div>
+        <button onclick="clearLog()">Clear Log</button>
+    </div>
+
+    <script>
+        const socket = io();
+        let playerId = null;
+        let allPlayers = {};
+        let testResults = [];
+
+        // Debug logging
+        function log(message) {
+            const logDiv = document.getElementById('debug-log');
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `[${timestamp}] ${message}\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(message);
+        }
+
+        function clearLog() {
+            document.getElementById('debug-log').innerHTML = '';
+        }
+
+        // Socket event handlers
+        socket.on('connect', () => {
+            log('✅ Connected to server');
+            playerId = socket.id;
+        });
+
+        socket.on('updatePlayers', (players) => {
+            allPlayers = players;
+            log(`📊 Players updated: ${Object.keys(players).length} players`);
+        });
+
+        socket.on('disconnect', () => {
+            log('❌ Disconnected from server');
+        });
+
+        // Test functions
+        function testResetPosition() {
+            log('🧪 Starting position reset test...');
+            const resultDiv = document.getElementById('position-result');
+            
+            // Get initial position
+            const initialPos = { x: 50, y: 300 };
+            log(`📍 Initial position: x=${initialPos.x}, y=${initialPos.y}`);
+            
+            // Simulate reset
+            socket.emit('resetPlayer');
+            
+            // Check if position is reset correctly
+            setTimeout(() => {
+                const me = allPlayers[playerId];
+                if (me) {
+                    const isCorrect = me.x === 50 && me.y === 300;
+                    const result = isCorrect ? 
+                        `<div class="test-result success">✅ Position reset successful: x=${me.x}, y=${me.y}</div>` :
+                        `<div class="test-result error">❌ Position reset failed: expected (50,300), got (${me.x},${me.y})</div>`;
+                    
+                    resultDiv.innerHTML = result;
+                    log(`📍 Final position: x=${me.x}, y=${me.y} - ${isCorrect ? 'PASS' : 'FAIL'}`);
+                } else {
+                    resultDiv.innerHTML = '<div class="test-result error">❌ Player not found</div>';
+                    log('❌ Player not found in allPlayers');
+                }
+            }, 100);
+        }
+
+        function testResetVelocity() {
+            log('🧪 Starting velocity reset test...');
+            const resultDiv = document.getElementById('velocity-result');
+            
+            // Simulate reset
+            socket.emit('resetPlayer');
+            
+            setTimeout(() => {
+                const me = allPlayers[playerId];
+                if (me) {
+                    const isCorrect = me.vx === 0 && me.vy === 0;
+                    const result = isCorrect ? 
+                        `<div class="test-result success">✅ Velocity reset successful: vx=${me.vx}, vy=${me.vy}</div>` :
+                        `<div class="test-result error">❌ Velocity reset failed: expected (0,0), got (${me.vx},${me.vy})</div>`;
+                    
+                    resultDiv.innerHTML = result;
+                    log(`⚡ Final velocity: vx=${me.vx}, vy=${me.vy} - ${isCorrect ? 'PASS' : 'FAIL'}`);
+                } else {
+                    resultDiv.innerHTML = '<div class="test-result error">❌ Player not found</div>';
+                    log('❌ Player not found in allPlayers');
+                }
+            }, 100);
+        }
+
+        function testMultipleResets() {
+            log('🧪 Starting multiple reset test...');
+            const resultDiv = document.getElementById('multiple-result');
+            
+            let resetCount = 0;
+            const maxResets = 5;
+            
+            function performReset() {
+                if (resetCount < maxResets) {
+                    resetCount++;
+                    log(`🔄 Performing reset #${resetCount}`);
+                    socket.emit('resetPlayer');
+                    
+                    setTimeout(() => {
+                        const me = allPlayers[playerId];
+                        if (me) {
+                            log(`📍 Reset #${resetCount} - Position: (${me.x},${me.y}), Velocity: (${me.vx},${me.vy})`);
+                            
+                            // Check if values are correct
+                            const isCorrect = me.x === 50 && me.y === 300 && me.vx === 0 && me.vy === 0;
+                            if (!isCorrect) {
+                                log(`❌ Reset #${resetCount} failed - values not reset properly`);
+                            }
+                        }
+                        
+                        if (resetCount < maxResets) {
+                            performReset();
+                        } else {
+                            // Final check
+                            const me = allPlayers[playerId];
+                            if (me && me.x === 50 && me.y === 300 && me.vx === 0 && me.vy === 0) {
+                                resultDiv.innerHTML = '<div class="test-result success">✅ Multiple resets successful - no doubling detected</div>';
+                                log('✅ Multiple reset test PASSED - no doubling detected');
+                            } else {
+                                resultDiv.innerHTML = '<div class="test-result error">❌ Multiple resets failed - doubling detected</div>';
+                                log('❌ Multiple reset test FAILED - doubling detected');
+                            }
+                        }
+                    }, 50);
+                }
+            }
+            
+            performReset();
+        }
+
+        function testStringValues() {
+            log('🧪 Starting string values test...');
+            const resultDiv = document.getElementById('string-result');
+            
+            // Check if any string values are being doubled
+            const me = allPlayers[playerId];
+            if (me) {
+                const stringFields = ['name', 'color'];
+                let hasDoubling = false;
+                let doublingDetails = [];
+                
+                stringFields.forEach(field => {
+                    if (me[field] && typeof me[field] === 'string') {
+                        // Check for obvious doubling patterns
+                        const value = me[field];
+                        if (value.length > 50) { // Suspiciously long
+                            hasDoubling = true;
+                            doublingDetails.push(`${field}: "${value}" (too long)`);
+                        }
+                        
+                        // Check for repeated patterns
+                        if (value.length > 10) {
+                            const half = Math.floor(value.length / 2);
+                            const firstHalf = value.substring(0, half);
+                            const secondHalf = value.substring(half);
+                            if (firstHalf === secondHalf) {
+                                hasDoubling = true;
+                                doublingDetails.push(`${field}: "${value}" (repeated pattern)`);
+                            }
+                        }
+                    }
+                });
+                
+                if (hasDoubling) {
+                    resultDiv.innerHTML = `<div class="test-result error">❌ String doubling detected:<br>${doublingDetails.join('<br>')}</div>`;
+                    log(`❌ String doubling detected: ${doublingDetails.join(', ')}`);
+                } else {
+                    resultDiv.innerHTML = '<div class="test-result success">✅ No string doubling detected</div>';
+                    log('✅ String values test PASSED - no doubling detected');
+                }
+                
+                // Log current string values
+                log(`📝 Current string values: name="${me.name}", color="${me.color}"`);
+            } else {
+                resultDiv.innerHTML = '<div class="test-result error">❌ Player not found</div>';
+                log('❌ Player not found in allPlayers');
+            }
+        }
+
+        // Initialize test
+        socket.on('connect', () => {
+            log('🚀 Test environment ready');
+            socket.emit('newPlayer', 'TestPlayer');
+        });
+    </script>
+</body>
+</html>

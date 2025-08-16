@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manual Reset Test</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #0056b3; }
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            max-height: 300px;
+            overflow-y: auto;
+            margin: 10px 0;
+        }
+        .player-info {
+            background: #e9ecef;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Manual Reset Test</h1>
+        
+        <div class="test-section">
+            <h2>Connection Status</h2>
+            <div id="connection-status" class="status info">Connecting...</div>
+            <button onclick="connectToServer()">Connect</button>
+        </div>
+
+        <div class="test-section">
+            <h2>Player Creation</h2>
+            <input type="text" id="playerName" value="TestPlayer" placeholder="Player name">
+            <button onclick="createPlayer()">Create Player</button>
+            <div id="player-status" class="status info">No player created</div>
+        </div>
+
+        <div class="test-section">
+            <h2>Reset Tests</h2>
+            <button onclick="testSingleReset()">Test Single Reset</button>
+            <button onclick="testMultipleResets()">Test Multiple Resets (5x)</button>
+            <button onclick="testStringIntegrity()">Test String Integrity</button>
+            <div id="reset-results"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>Current Player State</h2>
+            <div id="current-state" class="player-info">No player data</div>
+            <button onclick="refreshState()">Refresh State</button>
+        </div>
+
+        <div class="test-section">
+            <h2>Debug Log</h2>
+            <div id="debug-log" class="log"></div>
+            <button onclick="clearLog()">Clear Log</button>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let playerId = null;
+        let allPlayers = {};
+        let resetCount = 0;
+
+        // Debug logging
+        function log(message) {
+            const logDiv = document.getElementById('debug-log');
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `[${timestamp}] ${message}\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(message);
+        }
+
+        function clearLog() {
+            document.getElementById('debug-log').innerHTML = '';
+        }
+
+        // Connection handling
+        socket.on('connect', () => {
+            document.getElementById('connection-status').innerHTML = '✅ Connected to server';
+            document.getElementById('connection-status').className = 'status success';
+            log('Connected to server');
+        });
+
+        socket.on('disconnect', () => {
+            document.getElementById('connection-status').innerHTML = '❌ Disconnected from server';
+            document.getElementById('connection-status').className = 'status error';
+            log('Disconnected from server');
+        });
+
+        socket.on('updatePlayers', (players) => {
+            allPlayers = players;
+            log(`Players updated: ${Object.keys(players).length} players`);
+            updateCurrentState();
+        });
+
+        function connectToServer() {
+            log('Attempting to connect...');
+            socket.connect();
+        }
+
+        function createPlayer() {
+            const name = document.getElementById('playerName').value || 'TestPlayer';
+            log(`Creating player: ${name}`);
+            socket.emit('newPlayer', name);
+            document.getElementById('player-status').innerHTML = `Creating player: ${name}`;
+            document.getElementById('player-status').className = 'status info';
+        }
+
+        function updateCurrentState() {
+            const me = allPlayers[playerId];
+            if (me) {
+                const stateDiv = document.getElementById('current-state');
+                stateDiv.innerHTML = `
+                    <strong>Player ID:</strong> ${me.id}<br>
+                    <strong>Name:</strong> "${me.name}" (length: ${me.name.length})<br>
+                    <strong>Color:</strong> "${me.color}" (length: ${me.color.length})<br>
+                    <strong>Position:</strong> x=${me.x}, y=${me.y}<br>
+                    <strong>Velocity:</strong> vx=${me.vx}, vy=${me.vy}
+                `;
+            }
+        }
+
+        function refreshState() {
+            updateCurrentState();
+            log('State refreshed');
+        }
+
+        function testSingleReset() {
+            log('🧪 Testing single reset...');
+            const resultsDiv = document.getElementById('reset-results');
+            
+            if (!playerId) {
+                resultsDiv.innerHTML = '<div class="status error">❌ No player created yet</div>';
+                return;
+            }
+
+            const beforeState = allPlayers[playerId];
+            if (beforeState) {
+                log(`Before reset: x=${beforeState.x}, y=${beforeState.y}, name="${beforeState.name}"`);
+            }
+
+            socket.emit('resetPlayer');
+            
+            setTimeout(() => {
+                const afterState = allPlayers[playerId];
+                if (afterState) {
+                    log(`After reset: x=${afterState.x}, y=${afterState.y}, name="${afterState.name}"`);
+                    
+                    const positionCorrect = afterState.x === 50 && afterState.y === 300;
+                    const velocityCorrect = afterState.vx === 0 && afterState.vy === 0;
+                    const nameCorrect = afterState.name && afterState.name.length <= 20;
+                    
+                    if (positionCorrect && velocityCorrect && nameCorrect) {
+                        resultsDiv.innerHTML = '<div class="status success">✅ Single reset successful</div>';
+                    } else {
+                        resultsDiv.innerHTML = '<div class="status error">❌ Single reset failed</div>';
+                    }
+                }
+            }, 100);
+        }
+
+        function testMultipleResets() {
+            log('🧪 Testing multiple resets...');
+            const resultsDiv = document.getElementById('reset-results');
+            
+            if (!playerId) {
+                resultsDiv.innerHTML = '<div class="status error">❌ No player created yet</div>';
+                return;
+            }
+
+            resetCount = 0;
+            const maxResets = 5;
+            
+            function performReset() {
+                if (resetCount < maxResets) {
+                    resetCount++;
+                    log(`Performing reset #${resetCount}`);
+                    socket.emit('resetPlayer');
+                    
+                    setTimeout(() => {
+                        const state = allPlayers[playerId];
+                        if (state) {
+                            log(`Reset #${resetCount}: x=${state.x}, y=${state.y}, name="${state.name}"`);
+                            
+                            const isCorrect = state.x === 50 && state.y === 300 && 
+                                            state.vx === 0 && state.vy === 0;
+                            
+                            if (!isCorrect) {
+                                log(`❌ Reset #${resetCount} failed`);
+                            }
+                        }
+                        
+                        if (resetCount < maxResets) {
+                            performReset();
+                        } else {
+                            // Final check
+                            const finalState = allPlayers[playerId];
+                            if (finalState) {
+                                const finalCorrect = finalState.x === 50 && finalState.y === 300 && 
+                                                   finalState.vx === 0 && finalState.vy === 0;
+                                
+                                if (finalCorrect) {
+                                    resultsDiv.innerHTML = '<div class="status success">✅ Multiple resets successful</div>';
+                                } else {
+                                    resultsDiv.innerHTML = '<div class="status error">❌ Multiple resets failed</div>';
+                                }
+                            }
+                        }
+                    }, 50);
+                }
+            }
+            
+            performReset();
+        }
+
+        function testStringIntegrity() {
+            log('🧪 Testing string integrity...');
+            const resultsDiv = document.getElementById('reset-results');
+            
+            if (!playerId) {
+                resultsDiv.innerHTML = '<div class="status error">❌ No player created yet</div>';
+                return;
+            }
+
+            const me = allPlayers[playerId];
+            if (me) {
+                let hasDoubling = false;
+                let doublingDetails = [];
+                
+                // Check name
+                if (me.name && me.name.length > 20) {
+                    hasDoubling = true;
+                    doublingDetails.push(`Name too long: "${me.name}"`);
+                }
+                
+                // Check color
+                if (me.color && me.color.length > 10) {
+                    hasDoubling = true;
+                    doublingDetails.push(`Color too long: "${me.color}"`);
+                }
+                
+                // Check for repeated patterns
+                if (me.name && me.name.length > 10) {
+                    const half = Math.floor(me.name.length / 2);
+                    const firstHalf = me.name.substring(0, half);
+                    const secondHalf = me.name.substring(half);
+                    if (firstHalf === secondHalf) {
+                        hasDoubling = true;
+                        doublingDetails.push(`Name has repeated pattern: "${me.name}"`);
+                    }
+                }
+                
+                if (me.color && me.color.length > 6) {
+                    const half = Math.floor(me.color.length / 2);
+                    const firstHalf = me.color.substring(0, half);
+                    const secondHalf = me.color.substring(half);
+                    if (firstHalf === secondHalf) {
+                        hasDoubling = true;
+                        doublingDetails.push(`Color has repeated pattern: "${me.color}"`);
+                    }
+                }
+                
+                if (hasDoubling) {
+                    resultsDiv.innerHTML = `<div class="status error">❌ String doubling detected:<br>${doublingDetails.join('<br>')}</div>`;
+                    log(`❌ String doubling: ${doublingDetails.join(', ')}`);
+                } else {
+                    resultsDiv.innerHTML = '<div class="status success">✅ No string doubling detected</div>';
+                    log('✅ String integrity test passed');
+                }
+                
+                log(`Current strings - Name: "${me.name}", Color: "${me.color}"`);
+            }
+        }
+
+        // Set player ID when connected
+        socket.on('connect', () => {
+            playerId = socket.id;
+            log(`Player ID set: ${playerId}`);
+        });
+    </script>
+</body>
+</html>

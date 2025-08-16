@@ -50,6 +50,14 @@ io.on('connection', socket => {
     console.log(`🔁 player Telah Di reset: ${socket.id}`);
   }
 });
+
+  socket.on('getPlayerState', () => {
+    if (players[socket.id]) {
+      socket.emit('playerState', players[socket.id]);
+    } else {
+      socket.emit('playerState', { x: 0, y: 0, vx: 0, vy: 0, name: '', color: '' });
+    }
+  });
 });
 
 http.listen(PORT, () => {
