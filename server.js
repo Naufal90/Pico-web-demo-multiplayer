@@ -13,17 +13,28 @@ io.on('connection', socket => {
   console.log(` Player connected: ${socket.id}`);
 
   socket.on('newPlayer', name => {
-  console.log(`🟢 newPlayer: ${name} (${socket.id})`);
+  console.log(`🟢 [NEW PLAYER] Creating player: ${name} (${socket.id})`);
+  console.log(`   🏷️  Name: "${name}" (${name.length} characters)`);
+  console.log(`   🔗 Socket ID: ${socket.id}`);
+  
+  const color = '#' + Math.floor(Math.random()*16777215).toString(16);
+  console.log(`   🎨 Generated color: "${color}" (${color.length} characters)`);
+  
   players[socket.id] = {
     id: socket.id,
     name: name || 'Player',
     x: 50,
     y: 300,
-    vx: 0,   // tambahkan
-    vy: 0,   // tambahkan
-    color: '#' + Math.floor(Math.random()*16777215).toString(16)
+    vx: 0,
+    vy: 0,
+    color: color
   };
+  
+  console.log(`   ✅ Player created successfully`);
+  console.log(`   📊 Final player data: name="${players[socket.id].name}", color="${players[socket.id].color}"`);
+  
   io.emit('updatePlayers', players);
+  console.log(`   📡 Sent updatePlayers to all clients`);
 });
 
   socket.on('move', data => {
@@ -40,14 +51,27 @@ io.on('connection', socket => {
     io.emit('updatePlayers', players);
   });
   
-  socket.on('resetPlayer', () => {
+  socket.on('resetPlayer', (resetReason = 'unknown') => {
   if (players[socket.id]) {
-    players[socket.id].x = 50;
-    players[socket.id].y = 300;
-    players[socket.id].vx = 0;
-    players[socket.id].vy = 0;
+    const player = players[socket.id];
+    console.log(`🔁 [RESET] Player: ${player.name} (${socket.id})`);
+    console.log(`   📍 Before reset: x=${player.x}, y=${player.y}, vx=${player.vx}, vy=${player.vy}`);
+    console.log(`   🏷️  String values: name="${player.name}" (${player.name.length} chars), color="${player.color}" (${player.color.length} chars)`);
+    console.log(`   🎯 Reset reason: ${resetReason}`);
+    
+    // Perform reset
+    player.x = 50;
+    player.y = 300;
+    player.vx = 0;
+    player.vy = 0;
+    
+    console.log(`   📍 After reset: x=${player.x}, y=${player.y}, vx=${player.vx}, vy=${player.vy}`);
+    console.log(`   🏷️  String values: name="${player.name}" (${player.name.length} chars), color="${player.color}" (${player.color.length} chars)`);
+    console.log(`   ✅ Reset completed successfully`);
+    
     io.emit('updatePlayers', players);
-    console.log(`🔁 player Telah Di reset: ${socket.id}`);
+  } else {
+    console.log(`❌ [RESET] Player not found: ${socket.id}`);
   }
 });
 
