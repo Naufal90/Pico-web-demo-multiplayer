@@ -54,9 +54,19 @@ let allPlayers = {};
 console.log("[DEBUG] Socket initialized");
 
 socket.on('updatePlayers', players => {
+  console.log(`📡 [SOCKET] Received updatePlayers event`);
+  console.log(`   👥 Total players: ${Object.keys(players).length}`);
+  
   allPlayers = players;
   if (!playerId) {
     playerId = socket.id;
+    console.log(`   🆔 Set playerId to: ${playerId}`);
+  }
+  
+  // Log current player state if available
+  const me = players[playerId];
+  if (me) {
+    console.log(`   👤 My player state: name="${me.name}", color="${me.color}", pos=(${me.x},${me.y})`);
   }
 });
 
@@ -104,7 +114,12 @@ const cloudImg = (()=>{
 })();
 const clouds=[{x:100,y:50,s:1},{x:300,y:80,s:1.2},{x:600,y:40,s:.8}];
 
-function resetGame() {
+function resetGame(resetReason = 'manual') {
+  console.log(`🔄 [CLIENT RESET] Starting reset - Reason: ${resetReason}`);
+  console.log(`   📍 Before reset: x=${player.x}, y=${player.y}, vx=${player.vx}, vy=${player.vy}`);
+  console.log(`   🏷️  Player ID: ${playerId}`);
+  console.log(`   🎮 Game state: isDead=${isDead}, gameLoopRunning=${gameLoopRunning}`);
+  
   player.x = 50;
   player.y = 300;
   player.vx = 0;
@@ -115,30 +130,43 @@ function resetGame() {
   // set playerId dari socket.id yang aktif
   playerId = socket.id;
 
+  console.log(`   📍 After local reset: x=${player.x}, y=${player.y}, vx=${player.vx}, vy=${player.vy}`);
+  console.log(`   🏷️  New Player ID: ${playerId}`);
+
   // baru kirim reset
   if (USE_SERVER) {
-    socket.emit('resetPlayer');
+    console.log(`   🌐 Sending resetPlayer to server with reason: ${resetReason}`);
+    socket.emit('resetPlayer', resetReason);
   }
 
   document.getElementById('menu').style.display = 'none';
   document.getElementById('retryBtn')?.remove();
   
   // pastikan joystick & kecepatan benar-benar kosong
-dragging = false;
-knob.style.transform = 'translate(-50%, -50%)';
-if (!gameLoopRunning) {
-   startGameLoop();
+  dragging = false;
+  knob.style.transform = 'translate(-50%, -50%)';
+  
+  if (!gameLoopRunning) {
+    console.log(`   🎮 Starting game loop`);
+    startGameLoop();
   }
+  
+  console.log(`✅ [CLIENT RESET] Reset completed - Reason: ${resetReason}`);
 }
 
 /* ---------- START ---------- */
 function startGame(){
   const name = document.getElementById('username').value;
-  console.log("[DEBUG] Sending newPlayer with name:", name);
+  console.log(`🎮 [START GAME] Starting new game with player name: "${name}"`);
+  console.log(`   🏷️  Name length: ${name.length} characters`);
+  console.log(`   🔗 Socket ID: ${socket.id}`);
+  
   socket.emit('newPlayer', name);
   document.getElementById('menu').style.display='none';
   document.getElementById('mobileUI').style.display='flex';
-  resetGame();
+  
+  console.log(`🎮 [START GAME] Calling resetGame for initial setup`);
+  resetGame('game_start');
 }
 
 function startGameLoop() {
@@ -284,28 +312,52 @@ gameLoopId = requestAnimationFrame(gameLoop);
 }
 
 function showGameOver() {
+  console.log(`💀 [GAME OVER] Player died - Starting death sequence`);
+  console.log(`   📍 Death position: x=${player.x}, y=${player.y}, vx=${player.vx}, vy=${player.vy}`);
+  console.log(`   🏷️  Player ID: ${playerId}`);
+  
   stopGameLoop();
-    console.log("[DEBUG] Game loop stopped (Game Over)");
+  console.log("[DEBUG] Game loop stopped (Game Over)");
+  
   const menu = document.getElementById('menu');
   menu.style.display = 'flex';
   menu.innerHTML = `
     <h1>Kamu Mati!</h1>
     <button id="retryBtn">Coba Lagi</button>
   `;
-  document.getElementById('retryBtn').onclick = resetGame;
+  
+  // Add debug log for retry button click
+  document.getElementById('retryBtn').onclick = () => {
+    console.log(`🔄 [RESPAWN] Retry button clicked - respawning player`);
+    resetGame('death_respawn');
+  };
+  
+  console.log(`💀 [GAME OVER] Death sequence completed - waiting for respawn`);
 }
 
 function showLevelComplete() {  
+  console.log(`🏆 [LEVEL COMPLETE] Player reached finish - Starting victory sequence`);
+  console.log(`   📍 Victory position: x=${player.x}, y=${player.y}, vx=${player.vx}, vy=${player.vy}`);
+  console.log(`   🏷️  Player ID: ${playerId}`);
+  
   isDead = true;
   stopGameLoop();
-    console.log("[DEBUG] Game loop stopped (Level Complete)");
+  console.log("[DEBUG] Game loop stopped (Level Complete)");
+  
   const menu = document.getElementById('menu');
   menu.style.display = 'flex';
   menu.innerHTML = `
     <h1>Level Selesai!</h1>
     <button id="retryBtn">Main Lagi</button>
   `;
-  document.getElementById('retryBtn').onclick = resetGame;
+  
+  // Add debug log for play again button click
+  document.getElementById('retryBtn').onclick = () => {
+    console.log(`🔄 [PLAY_AGAIN] Play again button clicked - restarting level`);
+    resetGame('victory_restart');
+  };
+  
+  console.log(`🏆 [LEVEL COMPLETE] Victory sequence completed - waiting for restart`);
 }
 
 /*********************************************************************
